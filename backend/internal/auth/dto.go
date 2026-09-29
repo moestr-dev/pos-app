@@ -3,10 +3,12 @@ package auth
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type UserResponse struct {
-	ID        string    `json:"id"`
+	ID        uuid.UUID `json:"id"`
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
 	IsActive  bool      `json:"is_active"`
@@ -15,20 +17,20 @@ type UserResponse struct {
 }
 
 type RoleResponse struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
 }
 
 type PermissionResponse struct {
-	ID          string `json:"id"`
-	Code        string `json:"code"`
-	Description string `json:"description"`
+	ID          uuid.UUID `json:"id"`
+	Code        string    `json:"code"`
+	Description string    `json:"description"`
 }
 
 type AuditLogResponse struct {
-	ID        string          `json:"id"`
-	UserID    *string         `json:"user_id,omitempty"`
+	ID        uuid.UUID       `json:"id"`
+	UserID    *uuid.UUID      `json:"user_id,omitempty"`
 	Action    string          `json:"action"`
 	Detail    json.RawMessage `json:"detail,omitempty"`
 	CreatedAt time.Time       `json:"created_at"`

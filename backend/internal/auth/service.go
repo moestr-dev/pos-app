@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -84,6 +85,6 @@ func (s *Service) List(ctx context.Context) ([]UserResponse, error) {
 	return out, nil
 }
 
-func (s *Service) Permissions(ctx context.Context, userID string) ([]string, error) {
+func (s *Service) Permissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	return s.repo.UserPermissions(ctx, userID)
 }

@@ -5,7 +5,7 @@
 - Go module `pos-app` di `backend/` (Gin, pgx v5, validator, bcrypt, JWT v5, google/uuid, goose).
 - Frontend Vite + React + TypeScript + Tailwind v4 + shadcn/ui (terinstall, belum dipakai).
 
-## 2. Migrasi (`backend/migrations`, goose)
+## 2. Migrasi (`backend/db/migrations`, goose)
 - `00001_auth_schema.sql`: extension `pgcrypto`, schema `auth`, 7 tabel
   (`permissions`, `roles`, `role_permissions`, `users`, `user_roles`,
   `user_branches`, `audit_log`) — semua PK/FK UUID, plus index di `audit_log(user_id, created_at)`.
@@ -15,13 +15,16 @@
 ## 3. Kode backend (`backend/internal/`)
 - `platform/config`: baca env (DB_HOST/PORT/USER/PASSWORD/NAME, JWT_SECRET).
 - `platform/database`: koneksi `pgxpool.Pool`.
-- `auth/model.go`: entity DB (User, Role, Permission, AuditLog), ID string (UUID).
-- `auth/dto.go`: response DTO + mapper `ToResponse()` — `PasswordHash` tidak pernah
+- `auth/model.go` + `dto.go`: entity pakai `uuid.UUID` (`UserID *uuid.UUID` untuk
+  audit yang nullable); DTO + mapper `ToResponse()` — `PasswordHash` tidak pernah
   keluar ke API; `detail` audit dirender sebagai JSON object dengan guard `json.Valid`.
-- `auth/repository.go`: query pgx mentah; `DBTX` interface (terima Pool maupun Tx
-  untuk transaksi lintas modul); `UserRepository` interface untuk mocking;
-  `ErrUserNotFound` (tidak bocor `pgx.ErrNoRows`); slice selalu non-nil (`make`);
-  `WriteAuditLog` default `"{}"` agar cast `::jsonb` tidak error.
+- `auth/repository.go`: di atas sqlc (`dbsqlc.Queries`); `UserRepository` interface
+  untuk mocking; `ErrUserNotFound` (tidak bocor `pgx.ErrNoRows`); slice non-nil via
+  `emit_empty_slices`; `WriteAuditLog` default `"{}"`, konversi `*uuid.UUID` → NULL
+  via helper `toPgUUID`.
+- `db/` terkonsolidasi: `db/migrations/` (goose), `db/queries/auth.sql` (sumber sqlc),
+  `db/sqlc/` (hasil generate, jangan edit manual). `sqlc.yaml`: pgx/v5, override
+  uuid→`google/uuid`, timestamptz→`time.Time`.
 - `auth/service.go`: `Register` (bcrypt + audit), `Login` (cek aktif, cek password,
   ambil permission dengan error diteruskan, JWT HS256 dengan `exp`/`iat`
   `NewNumericDate`), `List` (return DTO), `Permissions` (delegasi ke repo).

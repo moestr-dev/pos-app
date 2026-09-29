@@ -1,9 +1,13 @@
 package auth
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type User struct {
-	ID           string
+	ID           uuid.UUID
 	Username     string
 	Email        string
 	PasswordHash string
@@ -13,20 +17,20 @@ type User struct {
 }
 
 type Role struct {
-	ID          string
+	ID          uuid.UUID
 	Name        string
 	Description string
 }
 
 type Permission struct {
-	ID          string
+	ID          uuid.UUID
 	Code        string
 	Description string
 }
 
 type AuditLog struct {
-	ID        string
-	UserID    *string
+	ID        uuid.UUID
+	UserID    *uuid.UUID
 	Action    string
 	Detail    string
 	CreatedAt time.Time

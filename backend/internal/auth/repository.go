@@ -4,122 +4,106 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	dbsqlc "pos-app/db/sqlc"
 )
 
 var ErrUserNotFound = errors.New("user not found")
-
-type DBTX interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
 
 type UserRepository interface {
 	CreateUser(ctx context.Context, username, email, passwordHash string) (*User, error)
 	FindUserByEmail(ctx context.Context, email string) (*User, error)
 	ListUsers(ctx context.Context) ([]User, error)
-	UserPermissions(ctx context.Context, userID string) ([]string, error)
-	WriteAuditLog(ctx context.Context, userID *string, action, detail string) error
+	UserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error)
+	WriteAuditLog(ctx context.Context, userID *uuid.UUID, action, detail string) error
 }
 
 type Repository struct {
-	db DBTX
+	q *dbsqlc.Queries
 }
 
-func NewRepository(db DBTX) *Repository {
-	return &Repository{db: db}
+func NewRepository(db dbsqlc.DBTX) *Repository {
+	return &Repository{q: dbsqlc.New(db)}
 }
 
-func NewRepositoryFromPool(pool *pgxpool.Pool) *Repository {
-	return &Repository{db: pool}
+func toUser(row dbsqlc.AuthUser) User {
+	return User{
+		ID:           row.ID,
+		Username:     row.Username,
+		Email:        row.Email,
+		PasswordHash: row.PasswordHash,
+		IsActive:     row.IsActive,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+	}
+}
+
+func toPgUUID(id *uuid.UUID) (pgtype.UUID, error) {
+	if id == nil {
+		return pgtype.UUID{Valid: false}, nil
+	}
+	var out pgtype.UUID
+	if err := out.Scan(id.String()); err != nil {
+		return pgtype.UUID{}, err
+	}
+	return out, nil
 }
 
 func (r *Repository) CreateUser(ctx context.Context, username, email, passwordHash string) (*User, error) {
-	var u User
-	err := r.db.QueryRow(ctx,
-		`INSERT INTO auth.users (username, email, password_hash)
-		 VALUES ($1, $2, $3)
-		 RETURNING id, username, email, password_hash, is_active, created_at, updated_at`,
-		username, email, passwordHash,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+	row, err := r.q.CreateUser(ctx, dbsqlc.CreateUserParams{
+		Username:     username,
+		Email:        email,
+		PasswordHash: passwordHash,
+	})
 	if err != nil {
 		return nil, err
 	}
+	u := toUser(row)
 	return &u, nil
 }
 
 func (r *Repository) FindUserByEmail(ctx context.Context, email string) (*User, error) {
-	var u User
-	err := r.db.QueryRow(ctx,
-		`SELECT id, username, email, password_hash, is_active, created_at, updated_at
-		 FROM auth.users WHERE email = $1`,
-		email,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+	row, err := r.q.FindUserByEmail(ctx, email)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	u := toUser(row)
 	return &u, nil
 }
 
 func (r *Repository) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := r.db.Query(ctx,
-		`SELECT id, username, email, password_hash, is_active, created_at, updated_at
-		 FROM auth.users ORDER BY created_at DESC`,
-	)
+	rows, err := r.q.ListUsers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	users := make([]User, 0)
-	for rows.Next() {
-		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.IsActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
-			return nil, err
-		}
-		users = append(users, u)
+	users := make([]User, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, toUser(row))
 	}
-	return users, rows.Err()
+	return users, nil
 }
 
-func (r *Repository) UserPermissions(ctx context.Context, userID string) ([]string, error) {
-	rows, err := r.db.Query(ctx,
-		`SELECT DISTINCT p.code
-		 FROM auth.permissions p
-		 JOIN auth.role_permissions rp ON rp.permission_id = p.id
-		 JOIN auth.user_roles ur ON ur.role_id = rp.role_id
-		 WHERE ur.user_id = $1`,
-		userID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	codes := make([]string, 0)
-	for rows.Next() {
-		var code string
-		if err := rows.Scan(&code); err != nil {
-			return nil, err
-		}
-		codes = append(codes, code)
-	}
-	return codes, rows.Err()
+func (r *Repository) UserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	return r.q.UserPermissions(ctx, userID)
 }
 
-func (r *Repository) WriteAuditLog(ctx context.Context, userID *string, action, detail string) error {
+func (r *Repository) WriteAuditLog(ctx context.Context, userID *uuid.UUID, action, detail string) error {
 	if detail == "" {
 		detail = "{}"
 	}
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO auth.audit_log (user_id, action, detail) VALUES ($1, $2, $3::jsonb)`,
-		userID, action, detail,
-	)
-	return err
+	pgID, err := toPgUUID(userID)
+	if err != nil {
+		return err
+	}
+	return r.q.WriteAuditLog(ctx, dbsqlc.WriteAuditLogParams{
+		UserID: pgID,
+		Action: action,
+		Detail: []byte(detail),
+	})
 }

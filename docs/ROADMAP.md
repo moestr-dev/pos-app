@@ -9,6 +9,10 @@
 - [ ] `cmd/api/main.go`: rakit config → pool → repo → service → handler → Gin;
       proteksi endpoint by permission; CORS terbatas; `r.Run(":8080")`.
 - [ ] Test manual via curl (register → login → akses endpoint terproteksi → cek audit_log).
+- [ ] **Integration test (disepakati 30 Sep: dikerjakan setelah curl hijau):**
+      repo + HTTP ke Postgres asli (`pos_test`, bukan `pos_db`); cakupan:
+      Create/Find roundtrip, `ErrUserNotFound`, `UserPermissions` setelah assign
+      role, `WriteAuditLog` dengan userID nil, unique-email violation.
 - [ ] Frontend: halaman login, manajemen user/role (guard by permission), penanganan sesi habis.
 
 ## Inventory (modul kedua)

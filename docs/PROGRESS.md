@@ -29,6 +29,13 @@
   ambil permission dengan error diteruskan, JWT HS256 dengan `exp`/`iat`
   `NewNumericDate`), `List` (return DTO), `Permissions` (delegasi ke repo).
 
-## 4. Keputusan yang terkunci
+## 4. Unit test (`internal/auth/service_test.go`)
+- Mock `UserRepository` berbasis map (tanpa DB, jalan <1 detik).
+- `TestRegister_HashesPassword`: hash tersimpan ≠ password asli, terverifikasi bcrypt.
+- `TestLogin` table-driven (success, wrong password, user not found, inactive):
+  klaim JWT (`sub`, `email`, `perms`) + tanda tangan diverifikasi via `jwt.Parse`.
+- `TestList_ReturnsDTOs`, `TestPermissions`. Hasil: 7/7 PASS.
+
+## 5. Keputusan yang terkunci
 goose, UUID semua PK/FK, bcrypt, izin granular per aksi, relasi user↔cabang
 many-to-many, nama proyek `pos-app`, docs di root `docs/`.
